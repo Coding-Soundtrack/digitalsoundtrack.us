@@ -35,6 +35,30 @@ String.prototype.toHHMMSS = function () {
   return time;
 }
 
+<<<<<<< HEAD
+=======
+function AppController($scope, $http) {
+  window.updatePlaylist = function(){
+    $http.get('/playlist.json').success(function(data){
+      $scope.tracks = data;
+    });
+  }
+
+  updatePlaylist()
+}
+
+function updateUserlist() {
+  $.get('/listeners.json', function(data) {
+    $('#userlist').html('');
+    $('.user-count').html('<strong>'+data.length+'</strong> online');
+    data.forEach(function(user) {
+      // TODO: use template (Blade?)
+      $('<li data-user-id="' + user._id + '"><a href="/'+user.slug+'">'+user.username+'</a></li>').appendTo('#userlist');
+    });
+  });
+}
+
+>>>>>>> e5a07d2... Highlight the curator in the list.
 $(window).on('load', function() {
   $("#messages").scrollTop($("#messages")[0].scrollHeight);
 

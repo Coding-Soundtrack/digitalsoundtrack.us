@@ -363,7 +363,7 @@ sock.on('connection', function(conn) {
           app.broadcast({
               type: 'join'
             , data: {
-                username: conn.id
+                username: conn.id //wat
               }
           });
           
@@ -430,7 +430,8 @@ sock.on('connection', function(conn) {
     app.broadcast({
         type: 'part'
       , data: {
-          id: conn.id
+            id: conn.id
+          , _id: (conn.user) ? conn.user._id : undefined
         }
     });
     delete app.clients[conn.id];
@@ -535,6 +536,7 @@ app.post('/playlist', requireLogin, function(req, res) {
             , slug: 'undefined'
             , curator: {
                   _id: req.user._id
+                , id: req.app.room.listeners[ req.user._id.toString() ].connId
                 , username: req.user.username
                 , slug: req.user.slug
               }
