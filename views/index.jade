@@ -51,7 +51,7 @@ block content
               a(href="/{{track._artist.slug}}/{{track.slug}}/{{track.id}}")
                 img.thumbnail-medium.pull-left(ng-src="{{track.images.thumbnail.url}}")
                 small.pull-right {{track.duration.toString().toHHMMSS()}}
-                span {{track.title}}
+                span {{track._artist.name}} &mdash; {{track.title}}
         h5 Add Track
         form#search-form
           if (user)
