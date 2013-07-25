@@ -342,21 +342,13 @@ app.post('/skip', /*/requireLogin,/**/ function(req, res) {
   console.log(req.headers);
   
   //Announce who skipped this song
-  res.render('partials/announcement', {
-      message: {
+  app.broadcast({
+      type: 'announcement'
+    , data: {
           message: "'" + app.room.track.title + "' was skipped by " + req.user.username + "."
         , created: new Date()
       }
-    }, function(err, html) {
-      app.broadcast({
-          type: 'announcement'
-        , data: {
-              formatted: html
-            , created: new Date()
-          }
-      });
-    }
-  );
+  });
   
   nextSong();
   res.send({ status: 'success' });
@@ -460,13 +452,20 @@ sock.on('connection', function(conn) {
           
           chat.save(function(err) {
             res.render('partials/message', {
-              message: chat
+              message: data.chat
             }, function(err, html) {
-              console.log('got chat', html);
+              console.log('got socket chat', html);
               app.broadcast({
                   type: 'chat'
                 , data: {
-                      formatted: html
+                      message: data.chat
+                    , _author: {
+                          _id: conn.user._id
+                        , username: conn.user.username
+                        , slug: conn.user.slug
+                        , avatar: conn.user.avatar
+                      }
+                    , formatted: html
                     , created: new Date()
                   }
               });
@@ -477,6 +476,8 @@ sock.on('connection', function(conn) {
         else {
           conn.write{JSON.stringify({"error":"User not authenticated"}));
         }
+        break;
+        
       //echo anything else
       default:
         conn.write(message);
@@ -539,6 +540,22 @@ app.get('/clients.json', function(req, res) {
   }) );
 });
 
+//Get chat history
+app.get('/chat.json', function(req, res) {
+  Chat.find({}).lean().limit(20).sort('-created').populate('_author', {hash: 0, salt:0}).exec(function(err, messages) {
+    async.map(messages, function(message, callback) {
+      res.render('partials/message', {
+        message: message.message
+      }, function(err, html) {
+        message.formatted = html;
+        callback(false, message);
+      });
+    }, function(err, results) {;
+      res.send(results);
+    });
+  });
+});
+
 //client requests that we give them a token to auth their socket
 //we generate a 32 byte (256bit) token and send that back.
 //But first we record the token's authData, user and time.
@@ -553,21 +570,18 @@ app.post('/chat', requireLogin, function(req, res) {
   });
   chat.save(function(err) {
     res.render('partials/message', {
-      message: {
-          _author: req.user
-        , message: req.param('message')
-        , created: chat.created
-      }
+      message: req.param('message')
     }, function(err, html) {
       app.broadcast({
           type: 'chat'
         , data: {
-              _author: {
+              message: req.param('message')
+            , _author: {
                   _id: req.user._id
                 , username: req.user.username
                 , slug: req.user.slug
+                , avatar: req.user.avatar
               }
-            , message: req.param('message')
             , formatted: html
             , created: new Date()
           }
