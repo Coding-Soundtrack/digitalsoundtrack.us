@@ -256,10 +256,8 @@ function getYoutubeVideo(videoID, callback) {
                 Artist.populate(track, {
                   path: '_artist'
                 }, function(err, track) {
-
                   console.log( 'being sent back:')
                   console.log( track );
-
                   callback( track );
                 });
 
@@ -540,6 +538,7 @@ app.get('/clients.json', function(req, res) {
   }) );
 });
 
+<<<<<<< HEAD
 //Get chat history
 app.get('/chat.json', function(req, res) {
   Chat.find({}).lean().limit(20).sort('-created').populate('_author', {hash: 0, salt:0}).exec(function(err, messages) {
@@ -556,6 +555,8 @@ app.get('/chat.json', function(req, res) {
   });
 });
 
+=======
+>>>>>>> e37cd54602b9617f797698b0f34b7e3af0d19062
 //client requests that we give them a token to auth their socket
 //we generate a 32 byte (256bit) token and send that back.
 //But first we record the token's authData, user and time.
@@ -575,6 +576,7 @@ app.post('/chat', requireLogin, function(req, res) {
       app.broadcast({
           type: 'chat'
         , data: {
+<<<<<<< HEAD
               message: req.param('message')
             , _author: {
                   _id: req.user._id
@@ -582,6 +584,14 @@ app.post('/chat', requireLogin, function(req, res) {
                 , slug: req.user.slug
                 , avatar: req.user.avatar
               }
+=======
+              _author: {
+                  _id: req.user._id
+                , username: req.user.username
+                , slug: req.user.slug
+              }
+            , message: req.param('message')
+>>>>>>> e37cd54602b9617f797698b0f34b7e3af0d19062
             , formatted: html
             , created: new Date()
           }
@@ -696,7 +706,10 @@ app.post('/playlist', requireLogin, function(req, res) {
 
 app.post('/:usernameSlug/playlists', requireLogin, playlists.create );
 app.post('/:usernameSlug/playlists/:playlistID', requireLogin, playlists.addTrack );
+<<<<<<< HEAD
 app.get('/:usernameSlug/playlists', requireLogin, playlists.getPlaylists );
+=======
+>>>>>>> e37cd54602b9617f797698b0f34b7e3af0d19062
 
 app.get('/register', function(req, res) {
   res.render('register');

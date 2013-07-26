@@ -68,8 +68,13 @@ block content
           .screen-inner#screen-inner
         .chat-container(ng-controller="ChatController")
           #messages.fadeout-top
+<<<<<<< HEAD
             .message(ng-repeat="message in messages", ng-include="getChatTemplate(message)")
               
+=======
+            each message in messages
+              include partials/message
+>>>>>>> e37cd54602b9617f797698b0f34b7e3af0d19062
           form#chat-form.input-append(style="display:block;")
             if (user)
               input.input-block-level(type="text", autocomplete="off", placeholder="click here to join the conversation")#chat-input
