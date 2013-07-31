@@ -3,6 +3,35 @@ body {
   padding-bottom: 40px;
 }
 
+#chat-form .input-block-level {
+  width: 492px;
+}
+
+@media (max-width: 1199px) {
+  #chat-form .input-block-level {
+    width: 382px;
+  }
+}
+
+@media (max-width: 979px) {
+  body {
+    padding-top: 0px;
+    padding-bottom: 40px;
+  }
+  #chat-form .input-block-level {
+    width: 275px;
+  }
+}
+@media (max-width: 781px) {
+  #chat-form .input-block-level {
+    width: 100%;
+  }
+  #chat-form button {
+    display: block;
+    width: 100%;
+  }
+}
+
 #screen-one {
   margin-left: auto;
   margin-right: auto;
@@ -31,6 +60,9 @@ body {
 #search-results li:hover {
   background: #ccc;
 }
+#search-form .input-block-level {
+  width: 230px;
+}
 #messages, #playlist, #userlist {
   height: 230px;
   overflow-y: scroll;
@@ -38,6 +70,7 @@ body {
 }
 #playlist {
   height: 338px;
+  clear: both;
 }
 #userlist {
   height: 500px;
@@ -67,9 +100,19 @@ body {
   background: #ffffd5;
 }
 
-.user-avatar-small {
+.user-avatar-small, .avatar-small {
   max-height: 1.2em;
   margin-right: 0.2em;
+}
+.avatar {
+  max-height: 2.5em;
+  margin-right: 0.5em;
+}
+.avatar-large {
+  max-height: 5em;
+  max-width: 10em;
+  margin-right: 1em;
+  border: 5px solid black;
 }
 
 .thumbnail-medium {
@@ -111,6 +154,9 @@ body {
   text-transform: uppercase;
   font-weight: bold;
   font-size: 0.8em;
+}
+#playlist-list li.active {
+  display: none;
 }
 
 #track-progress {
