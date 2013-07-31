@@ -19,7 +19,8 @@ var config = require('./config')
   , RedisStore = require('connect-redis')(express)
   , sessionStore = new RedisStore({ client: database.client })
   , crypto = require('crypto')
-  , marked = require('marked');
+  , marked = require('marked')
+  , validator = require('validator');
 
 app.set('views', __dirname + '/views');
 app.set('view engine', 'jade');
@@ -63,12 +64,24 @@ app.use(function(req, res, next) {
 });
 app.use( flashify );
 
+var lexers = {
+    chat: new marked.InlineLexer([], {sanitize: true, smartypants:true, gfm:true})
+  , content: new marked.InlineLexer([], {sanitize: true, smartypants:true, gfm:true})
+};
+lexers.chat.rules.link = /^\[((?:\[[^\]]*\]|[^\]]|\](?=[^\[]*\]))*)\]\(\s*<?([^\s]*?)>?(?:\s+['"]([\s\S]*?)['"])?\s*\)/;
+
 app.locals.pretty   = true;
 app.locals.moment   = require('moment');
 app.locals.marked   = marked;
-app.locals.lexer    = new marked.InlineLexer([], {sanitize: true, smartypants:true, gfm:true});
+app.locals.lexers   = lexers;
+app.locals.lexer    = lexers.content;
+app.locals.sanitize = validator.sanitize;
 app.locals._        = _;
 app.locals.helpers  = require('./helpers').helpers;
+String.prototype.capitalize = function(){
+  return this.replace( /(^|\s)([a-z])/g , function(m,p1,p2){ return p1+p2.toUpperCase(); } );
+};
+
 
 var auth = require('./controllers/auth')
   , pages = require('./controllers/pages')
@@ -126,6 +139,7 @@ app.redis.get('soundtrack:playlist', function(err, playlist) {
 });
 app.socketAuthTokens = [];
 
+//Send a message to all connected sockets
 app.broadcast = function(msg) {
   var json = JSON.stringify(msg);
   for (var id in app.clients) {
@@ -133,11 +147,13 @@ app.broadcast = function(msg) {
   }
 };
 
+//Send a message to a specific socket
 app.whisper = function(id, msg) {
   var json = JSON.stringify(msg);
   app.clients[id].write(json);
 }
 
+//Ping all connected clients
 app.markAndSweep = function(){
   app.broadcast({type: 'ping'}); // we should probably not do this globally... instead, start interval after client connect?
   var time = (new Date()).getTime();
@@ -163,10 +179,11 @@ app.forEachClient = function(fn) {
   }
 }
 
+//Get data from youtube for a specified videoID
 function getYoutubeVideo(videoID, callback) {
-  rest.get('http://gdata.youtube.com/feeds/api/videos?max-results=1&v=2&alt=jsonc&q='+videoID).on('complete', function(data) {
-    if (data && data.data && data.data.items) {
-      var video = data.data.items[0];
+  rest.get('http://gdata.youtube.com/feeds/api/videos/'+videoID+'?v=2&alt=jsonc').on('complete', function(data) {
+    if (data && data.data) {
+      var video = data.data;
       Track.findOne({
         'sources.youtube.id': video.id
       }).exec(function(err, track) {
@@ -176,9 +193,28 @@ function getYoutubeVideo(videoID, callback) {
         // it'll be slow.
         rest.get('http://codingsoundtrack.org/songs/1:'+video.id+'.json').on('complete', function(data) {
 
+          // hack to allow title re-parsing
+          // be cautious here if we ever store the video titles
+          //video.title = track.title || video.title;
+
+          // TODO: load from datafile
+          var baddies = ['[hd]', '[dubstep]', '[electro]', '[edm]', '[house music]', '[glitch hop]', '[video]', '[official video]', '[free download]', '[free DL]', '[monstercat release]'];
+          baddies.forEach(function(token) {
+            video.title = video.title.replace(token + ' - ', '').trim();
+            video.title = video.title.replace(token.toUpperCase() + ' - ', '').trim();
+            video.title = video.title.replace(token.capitalize() + ' - ', '').trim();
+
+            video.title = video.title.replace(token, '').trim();
+            video.title = video.title.replace(token.toUpperCase(), '').trim();
+            video.title = video.title.replace(token.capitalize(), '').trim();
+          });
+
+          // if codingsoundtrack.org isn't aware of it...
           if (!data.author) {
+            var parts = video.title.split(' - ');
             data = {
-              author: video.title.split(' - ')[0]
+                author: parts[0].trim()
+              , title: (track.title) ? track.title : video.title
             };
           }
 
@@ -202,7 +238,11 @@ function getYoutubeVideo(videoID, callback) {
               });
             }
 
-            track.title                = (data.title) ? data.title : video.title;
+            // if the track doesn't already have a title, set it from 
+            if (!track.title) {
+              track.title = data.title || video.title;
+            }
+
             track.duration             = (track.duration) ? track.duration : video.duration;
             track.images.thumbnail.url = video.thumbnail.hqDefault;
 
@@ -229,7 +269,7 @@ function getYoutubeVideo(videoID, callback) {
         });
       });
     } else {
-      console.log('waaaaaaaaaaat');
+      console.log('waaaaaaaaaaat  videoID: ' + videoID);
       console.log(data);
 
       callback();
@@ -295,27 +335,20 @@ function sortPlaylist() {
   }) );
 }
 
+//Skip the currently playing song
 app.post('/skip', /*/requireLogin,/**/ function(req, res) {
   console.log('skip received:');
   console.log(req.user);
   console.log(req.headers);
   
   //Announce who skipped this song
-  res.render('partials/announcement', {
-      message: {
+  app.broadcast({
+      type: 'announcement'
+    , data: {
           message: "'" + app.room.track.title + "' was skipped by " + req.user.username + "."
         , created: new Date()
       }
-    }, function(err, html) {
-      app.broadcast({
-          type: 'announcement'
-        , data: {
-              formatted: html
-            , created: new Date()
-          }
-      });
-    }
-  );
+  });
   
   nextSong();
   res.send({ status: 'success' });
@@ -354,7 +387,14 @@ sock.on('connection', function(conn) {
   conn.pongTime = (new Date()).getTime();
 
   conn.on('data', function(message) {
-    var data = JSON.parse(message);
+    try {
+      var data = JSON.parse(message);
+    }
+    catch (e) {
+      //http://tools.ietf.org/html/rfc6455#section-7.4
+      conn.close(1003, "Invalid JSON");
+      return;
+    }
     switch (data.type) {
       //respond to pings
       case 'pong':
@@ -389,7 +429,9 @@ sock.on('connection', function(conn) {
           app.broadcast({
               type: 'join'
             , data: {
-                username: conn.id //wat
+                  _id: matches[0].user._id
+                , username: matches[0].user.username
+                , slug: matches[0].user.slug
               }
           });
           
@@ -398,14 +440,51 @@ sock.on('connection', function(conn) {
           conn.close();
         }
         break;
-
+        
+      case 'chat':
+        if (conn.user) {
+          var chat = new Chat({
+              _author: conn.user._id
+            , message: data.chat
+          });
+          
+          chat.save(function(err) {
+            res.render('partials/message', {
+              message: data.chat
+            }, function(err, html) {
+              console.log('got socket chat', html);
+              app.broadcast({
+                  type: 'chat'
+                , data: {
+                      message: data.chat
+                    , _author: {
+                          _id: conn.user._id
+                        , username: conn.user.username
+                        , slug: conn.user.slug
+                        , avatar: conn.user.avatar
+                      }
+                    , formatted: html
+                    , created: new Date()
+                  }
+              });
+              conn.write(JSON.stringify({ status: 'success' }));
+            });
+          });
+        }
+        else {
+          conn.write(JSON.stringify({"error":"User not authenticated"}));
+        }
+        break;
+        
       //echo anything else
       default:
         conn.write(message);
         break;
     }
+
   });
 
+  //Send the newly connected client the current track data
   conn.write(JSON.stringify({
       type: 'track'
     , data: app.room.playlist[0]
@@ -413,6 +492,8 @@ sock.on('connection', function(conn) {
   }));
 
   conn.on('close', function() {
+  
+    //If this was an authenticated client then we should remove them from the listeners array
     if (conn.user) {
       console.log("connection closed for user " + conn.user.username);
       
@@ -422,6 +503,7 @@ sock.on('connection', function(conn) {
       };
     }
     
+    //Tell all connected clients about this disconnect
     app.broadcast({
         type: 'part'
       , data: {
@@ -436,13 +518,41 @@ sock.installHandlers(server, {prefix:'/stream'});
 
 app.get('/', pages.index);
 app.get('/about', pages.about);
+app.get('/angular/:view', function(req, res) {
+  res.render('angular/'+req.param('view'));
+});
 
+//Get the list of songs currently in the playlist
 app.get('/playlist.json', function(req, res) {
   res.send(app.room.playlist);
 });
 
+//Get list of users currently listening in the room
 app.get('/listeners.json', function(req, res) {
   res.send( _.toArray( app.room.listeners ) );
+});
+
+//Get a list of connected clients
+app.get('/clients.json', function(req, res) {
+  res.send( _.toArray( app.clients ).map(function(client) {
+    return client.user;
+  }) );
+});
+
+//Get chat history
+app.get('/chat.json', function(req, res) {
+  Chat.find({}).lean().limit(20).sort('-created').populate('_author', {hash: 0, salt:0}).exec(function(err, messages) {
+    async.map(messages, function(message, callback) {
+      res.render('partials/message', {
+        message: message.message
+      }, function(err, html) {
+        message.formatted = html;
+        callback(false, message);
+      });
+    }, function(err, results) {;
+      res.send(results);
+    });
+  });
 });
 
 //client requests that we give them a token to auth their socket
@@ -451,6 +561,7 @@ app.get('/listeners.json', function(req, res) {
 //We use the recorded time to make sure we issued the token recently
 app.post('/socket-auth', requireLogin, auth.configureToken);
 
+//Send a chat message
 app.post('/chat', requireLogin, function(req, res) {
   var chat = new Chat({
       _author: req.user._id
@@ -458,17 +569,19 @@ app.post('/chat', requireLogin, function(req, res) {
   });
   chat.save(function(err) {
     res.render('partials/message', {
-      message: {
-          _author: req.user
-        , message: req.param('message')
-        , created: chat.created
-      }
+      message: req.param('message')
     }, function(err, html) {
-      console.log('got chat', html);
       app.broadcast({
           type: 'chat'
         , data: {
-              formatted: html
+              message: req.param('message')
+            , _author: {
+                  _id: req.user._id
+                , username: req.user.username
+                , slug: req.user.slug
+                , avatar: req.user.avatar
+              }
+            , formatted: html
             , created: new Date()
           }
       });
@@ -477,6 +590,7 @@ app.post('/chat', requireLogin, function(req, res) {
   });
 });
 
+//Vote on a track
 app.post('/playlist/:trackID', requireLogin, function(req, res, next) {
 
   var playlistMap = app.room.playlist.map(function(x) {
@@ -507,6 +621,7 @@ app.post('/playlist/:trackID', requireLogin, function(req, res, next) {
 
 });
 
+//Add a track to the room playlist
 app.post('/playlist', requireLogin, function(req, res) {
   switch(req.param('source')) {
     default:
@@ -543,41 +658,68 @@ app.post('/playlist', requireLogin, function(req, res) {
         res.send({ status: 'success' });
       });
     break;
+    // add a track via its soundtack _id
+    case 'id':
+      Track.findOne({'_id':req.param('id')}).exec(function(err, track) {
+        if (track) {
+          app.room.playlist.push( _.extend( track.toObject() , {
+              score: 0
+            , votes: {} // TODO: auto-upvote?
+            , timestamp: new Date()
+            , curator: {
+                  _id: req.user._id
+                , id: (req.app.room.listeners[ req.user._id.toString() ]) ? req.app.room.listeners[ req.user._id.toString() ].connId : undefined
+                , username: req.user.username
+                , slug: req.user.slug
+              }
+          } ) );
+          
+          sortPlaylist();
+
+          app.redis.set("soundtrack:playlist", JSON.stringify( app.room.playlist ) );
+
+          app.broadcast({
+              type: 'playlist:add'
+            , data: track
+          });
+          
+          res.send({status: 'success'});
+        }
+        else {
+          res.send(500, {status: 'error'})
+        }
+      });
+    break;
   }
 });
 
 app.post('/:usernameSlug/playlists', requireLogin, playlists.create );
 app.post('/:usernameSlug/playlists/:playlistID', requireLogin, playlists.addTrack );
-
-app.get('/pages.json', function(req, res) {
-  res.send({
-    "home": {
-      "title": "Home",
-      "content": "This is the home page. Welcome"
-    },
-    "about": {
-      "title": "About",
-      "content": "This is the about page. Welcome"
-    }
-  });
-});
+app.get('/:usernameSlug/playlists', requireLogin, playlists.getPlaylists );
 
 app.get('/register', function(req, res) {
   res.render('register');
 });
 
 app.post('/register', function(req, res) {
-  Person.register(new Person({ username : req.body.username }), req.body.password, function(err, user) {
-    if (err) {
-      console.log(err);
-      req.flash('error', 'Something went wrong: ' + err);
+  Person.findOne({ slug: slug( req.body.username ) }).exec(function(err, user) {
+    if (user) {
+      req.flash('error', 'That username is already taken!');
       return res.render('register', { user : user });
-    } else {
-      req.logIn(user, function(err) {
-        req.flash('info', 'Welcome to soundtrack.io!');
-        res.redirect('/');
-      });
     }
+
+    Person.register(new Person({ username : req.body.username }), req.body.password, function(err, user) {
+      if (err) {
+        console.log(err);
+        req.flash('error', 'Something went wrong: ' + err);
+        return res.render('register', { user : user });
+      } else {
+        req.logIn(user, function(err) {
+          req.flash('info', 'Welcome to soundtrack.io!');
+          res.redirect('/');
+        });
+      }
+    });
   });
 });
 
