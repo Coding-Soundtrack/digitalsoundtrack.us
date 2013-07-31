@@ -1,6 +1,6 @@
-# soundtrack.io
+# DigitalSoundtrack.us
 
-soundtrack.io is a collaborative online jukebox.
+Digital Soundtrack is a collaborative online jukebox.
 
 ## Getting Started
 
@@ -13,8 +13,8 @@ Homebrew is recommended for OS X users.
 
 Once you have them installed, go ahead and clone the repository.
 
-    git clone git@github.com:fractaloop/soundtrack.io.git
-    cd soundtrack.io
+    git clone git@github.com:Coding-Soundtrack/digitalsoundtrack.us.git
+    cd digitalsoundtrack.us
 
 You will need to fetch the dependencies and then you can start up the server.
 
@@ -23,4 +23,4 @@ You will need to fetch the dependencies and then you can start up the server.
 
 ## Contributing
 
-You know the drill.
+This code originated with [soundtrack.io](https://github.com/martindale/soundtrack.io) but has moved here in hopes to broaden the community's ability to decide upon changes to the site.
